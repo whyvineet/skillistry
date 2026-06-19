@@ -1,0 +1,42 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env/
+.env
+
+# Packaging/build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# Type checking and lint caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Editor/IDE settings
+.vscode/
+.idea/
+
+# Logs
+*.log
+pip-log.txt
+pip-delete-this-directory.txt
+
+# OS files
+.DS_Store
+Thumbs.db
