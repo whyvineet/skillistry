@@ -12,9 +12,8 @@ def extract_audio_node(state: InterviewState) -> dict[str, Any]:
     logger.info("[Node] extract_audio  video=%s", state["video_path"])
 
     audio_path = AudioProcessor.extract_audio(state["video_path"])
-    if not audio_path:
-        return {"error": "Failed to extract audio from the video file."}
-
+    # If audio extraction produces None (video is silent / has no audio track),
+    # proceed with audio_path=None rather than aborting the pipeline.
     return {"audio_path": audio_path}
 
 
@@ -33,7 +32,17 @@ def analyze_video_node(state: InterviewState) -> dict[str, Any]:
 def analyze_speech_node(state: InterviewState, speech_analyzer: SpeechAnalyzer) -> dict[str, Any]:
     audio_path = state.get("audio_path")
     if not audio_path:
-        return {"error": "No audio path available for speech analysis."}
+        logger.info("[Node] analyze_speech - no audio track in video, returning empty speech analysis.")
+        return {
+            "transcript": "",
+            "speech_analysis": {
+                "pronunciation_issues": [],
+                "raw_transcript": "",
+                "formatted_text": "",
+                "speaking_rate_wpm": 0.0,
+                "pacing_category": "no_audio_track",
+            },
+        }
 
     logger.info("[Node] analyze_speech  audio=%s", audio_path)
 
@@ -45,6 +54,8 @@ def analyze_speech_node(state: InterviewState, speech_analyzer: SpeechAnalyzer) 
             "pronunciation_issues": result.pronunciation_issues,
             "raw_transcript": result.raw_transcript,
             "formatted_text": result.formatted_text,
+            "speaking_rate_wpm": result.speaking_rate_wpm,
+            "pacing_category": result.pacing_category,
         },
     }
 

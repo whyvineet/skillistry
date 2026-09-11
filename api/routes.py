@@ -1,5 +1,6 @@
 import os
 import logging
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException, Request
@@ -63,16 +64,27 @@ async def upload_video(
         logger.info("Invoking workflow for video_id=%s", video_id)
         final_state = workflow.invoke(initial_state)
 
+        # Track the extracted audio before handling pipeline errors so it can
+        # be cleaned up regardless of where processing stops.
+        audio_path = final_state.get("audio_path")
+
         # Handle pipeline errors
         if final_state.get("error"):
             raise HTTPException(status_code=400, detail=final_state["error"])
 
         # Build response
-        audio_path = final_state.get("audio_path")  # track for cleanup
+        speech = final_state.get("speech_analysis") or {}
+        content = final_state.get("content_analysis") or {}
+        video_result = final_state.get("video_analysis") or {}
 
-        speech = final_state.get("speech_analysis", {})
-        content = final_state.get("content_analysis", {})
-        video_result = final_state.get("video_analysis", {})
+        # Merge vocal confidence metrics
+        if "speaking_rate_wpm" in speech and "speaking_rate_wpm" not in video_result:
+            video_result["speaking_rate_wpm"] = speech.get("speaking_rate_wpm", 0.0)
+            video_result["pacing_category"] = speech.get("pacing_category", "optimal")
+
+        # If there is no audio track in the video, set confidence score to 0.0
+        if not final_state.get("audio_path") or speech.get("pacing_category") in ("no_audio_track", "no_speech_detected"):
+            video_result["confidence_score"] = 0.0
 
         response = AnalysisResponse(
             video_id=video_id,
@@ -81,6 +93,11 @@ async def upload_video(
             speech_analysis=speech.get("pronunciation_issues", []),
             content_analysis=content,
         )
+
+        json_path = os.path.join(upload_folder, f"{video_id}.json")
+        with open(json_path, "w", encoding="utf-8") as json_file:
+            json.dump(response.model_dump(), json_file, indent=2, ensure_ascii=False)
+        logger.info("Saved analysis JSON -> %s", json_path)
 
         return response
 
