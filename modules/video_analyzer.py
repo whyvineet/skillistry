@@ -1,4 +1,3 @@
-import time
 import logging
 from typing import Any
 
@@ -9,25 +8,26 @@ logger = logging.getLogger(__name__)
 
 
 class VideoAnalyzer:
-    # Emotion → confidence weight  (range: -1 … +1)
+    # Emotion → confidence weight  (calibrated for interview context where
+    # resting/neutral/serious faces are frequently categorized as 'sad' by DeepFace)
     EMOTION_WEIGHTS: dict[str, float] = {
-        "happy": 1.0,
-        "neutral": 0.7,
-        "surprise": 0.4,
-        "angry": -0.3,
-        "disgust": -0.6,
-        "fear": -0.9,
-        "sad": -1.0,
+        "happy": 0.95,      # Smiling, positive, warm
+        "neutral": 0.85,    # Composed, calm, professional
+        "surprise": 0.50,   # Expressive / animated
+        "sad": 0.35,        # Resting / focused face in video interview
+        "angry": 0.10,      # Focused intensity or mild tension
+        "disgust": -0.40,   # Discomfort
+        "fear": -0.80,      # Genuine anxiety / nervousness
     }
 
     # Blink-rate categories and their confidence contribution
-    # Research baseline: 15-20 blinks / min is normal
+    # Research baseline: 11-20 blinks / min is normal conversation baseline
     BLINK_RATE_CONFIDENCE: dict[str, float] = {
-        "very_low": 0.7,   # 0-5  bpm  – highly focused
-        "low": 0.9,        # 6-10 bpm  – focused
-        "normal": 0.6,     # 11-20 bpm – relaxed
-        "high": -0.3,      # 21-30 bpm – slight nervousness
-        "very_high": -0.8, # 30+  bpm  – anxiety / discomfort
+        "very_low": 0.80,   # 0-5  bpm  – highly focused / intense gaze
+        "low": 0.95,        # 6-10 bpm  – steady & confident eye contact
+        "normal": 0.90,     # 11-20 bpm – relaxed, natural conversation
+        "high": 0.40,       # 21-30 bpm – slight nervousness
+        "very_high": -0.60, # 30+  bpm  – anxiety / rapid eye flutter
     }
 
     # Optimization: target frame-sample rate
@@ -124,9 +124,8 @@ class VideoAnalyzer:
         emotion_totals: dict[str, float] = {e: 0.0 for e in cls.EMOTION_WEIGHTS}
 
         blink_counter = 0
-        last_blink_time = time.time()
+        last_blink_video_time = -float("inf")
         eye_status_history: list[bool] = []
-        start_time = time.time()
 
         while cap.isOpened():
             ret, frame = cap.read()
@@ -140,9 +139,10 @@ class VideoAnalyzer:
                 blink, _, eye_status_history = analyzer._detect_blinks(
                     frame, eye_status_history
                 )
-                if blink and time.time() - last_blink_time > analyzer.blink_threshold:
+                video_time = frame_count / source_fps
+                if blink and video_time - last_blink_video_time > analyzer.blink_threshold:
                     blink_counter += 1
-                    last_blink_time = time.time()
+                    last_blink_video_time = video_time
             except Exception as exc:
                 logger.debug("Frame %d blink error: %s", frame_count, exc)
 
@@ -150,42 +150,51 @@ class VideoAnalyzer:
             if frame_count % sample_every != 0:
                 continue
 
-            # Optimization: resize to a smaller resolution before inference
-            small_frame = cv2.resize(
-                frame,
-                (cls.INFERENCE_WIDTH, cls.INFERENCE_HEIGHT),
-                interpolation=cv2.INTER_AREA,
-            )
-
             dominant_emotion: str | None = None
             weighted_emotion_score = 0.0
             emotion_data: dict | None = None
 
-            try:
-                analysis = DeepFace.analyze(
-                    small_frame, actions=["emotion"], enforce_detection=False
-                )
-                if analysis and isinstance(analysis, list):
-                    emotions: dict[str, float] = {
-                        k: float(v) for k, v in analysis[0]["emotion"].items()
-                    }
-                    total_conf = sum(emotions.values())
-                    if total_conf > 0:
-                        weighted_score = 0.0
-                        for emotion, conf in emotions.items():
-                            norm = conf / total_conf
-                            if emotion in cls.EMOTION_WEIGHTS:
-                                weighted_score += norm * cls.EMOTION_WEIGHTS[emotion]
-                                emotion_totals[emotion] += norm
+            # Detect face ROI using OpenCV first to prevent aspect-ratio distortion or scale misses
+            gray_sampled = cv2.equalizeHist(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
+            faces_sampled = analyzer.face_cascade.detectMultiScale(gray_sampled, 1.3, 5, minSize=(40, 40))
 
-                        dominant_emotion = max(emotions, key=emotions.get)
-                        weighted_emotion_score = weighted_score
-                        emotion_data = emotions
-                        total_weighted_confidence += weighted_score
-                        valid_frames += 1
+            if len(faces_sampled) > 0:
+                # Select the largest detected face
+                faces_sorted = sorted(faces_sampled, key=lambda b: b[2] * b[3], reverse=True)
+                fx, fy, fw, fh = faces_sorted[0]
+                margin_y = int(fh * 0.1)
+                margin_x = int(fw * 0.1)
+                y1 = max(0, fy - margin_y)
+                y2 = min(frame.shape[0], fy + fh + margin_y)
+                x1 = max(0, fx - margin_x)
+                x2 = min(frame.shape[1], fx + fw + margin_x)
+                face_roi = frame[y1:y2, x1:x2]
 
-            except Exception as exc:
-                logger.debug("Frame %d emotion error: %s", frame_count, exc)
+                try:
+                    analysis = DeepFace.analyze(
+                        face_roi, actions=["emotion"], enforce_detection=False, silent=True
+                    )
+                    if analysis and isinstance(analysis, list):
+                        emotions: dict[str, float] = {
+                            k: float(v) for k, v in analysis[0]["emotion"].items()
+                        }
+                        total_conf = sum(emotions.values())
+                        if total_conf > 0:
+                            weighted_score = 0.0
+                            for emotion, conf in emotions.items():
+                                norm = conf / total_conf
+                                if emotion in cls.EMOTION_WEIGHTS:
+                                    weighted_score += norm * cls.EMOTION_WEIGHTS[emotion]
+                                    emotion_totals[emotion] += norm
+
+                            dominant_emotion = max(emotions, key=emotions.get)
+                            weighted_emotion_score = weighted_score
+                            emotion_data = emotions
+                            total_weighted_confidence += weighted_score
+                            valid_frames += 1
+
+                except Exception as exc:
+                    logger.debug("Frame %d face ROI emotion error: %s", frame_count, exc)
 
             # Sample frame detail (first 10 analyzed frames)
             if emotion_data and len(frame_details) < 10:
@@ -199,20 +208,51 @@ class VideoAnalyzer:
 
         cap.release()
 
-        if valid_frames == 0:
-            return {"error": "No faces detected in the video."}
-
         # Final scoring
-        total_minutes = (time.time() - start_time) / 60.0
+        expected_sampled_frames = max(1, frame_count // sample_every)
+        face_presence_rate = valid_frames / expected_sampled_frames
+
+        # If no face was detected
+        if valid_frames == 0 or (expected_sampled_frames >= 4 and valid_frames < 2):
+            return {
+                "confidence_score": 0.0,
+                "frames_analyzed": int(valid_frames),
+                "total_frames": int(frame_count),
+                "blinks_per_minute": 0.0,
+                "blink_rate_category": "no_face_detected",
+                "speaking_rate_wpm": 0.0,
+                "pacing_category": "no_speech_detected",
+                "emotion_percentages": {},
+                "frame_details": [],
+            }
+
+        video_duration_seconds = frame_count / source_fps if source_fps > 0 else 0.0
+        total_minutes = video_duration_seconds / 60.0
         blinks_per_minute = blink_counter / total_minutes if total_minutes > 0 else 0.0
 
         blink_category = analyzer._categorize_blink_rate(blinks_per_minute)
         blink_conf_raw = cls.BLINK_RATE_CONFIDENCE[blink_category]
 
+        # Multi-signal confidence calculation
+        # 1. Emotion score (scaled 0-100)
         emotion_conf_raw = total_weighted_confidence / valid_frames
         emotion_conf_scaled = ((emotion_conf_raw + 1) / 2) * 100
+
+        # 2. Blink score (scaled 0-100)
         blink_conf_scaled = ((blink_conf_raw + 1) / 2) * 100
-        combined = (emotion_conf_scaled + blink_conf_scaled) / 2
+
+        # 3. Face presence stability (percentage of expected sampled frames with clear face detection)
+        expected_sampled_frames = max(1, frame_count // sample_every)
+        face_presence_rate = min(1.0, valid_frames / expected_sampled_frames)
+        face_stability_scaled = face_presence_rate * 100
+
+        # Weighted combination: 55% facial composure, 35% eye contact, 10% camera presence
+        combined = (
+            0.55 * emotion_conf_scaled
+            + 0.35 * blink_conf_scaled
+            + 0.10 * face_stability_scaled
+        )
+        combined = max(0.0, min(100.0, combined))
 
         emotion_percentages = {
             e: float(round((emotion_totals[e] / valid_frames) * 100, 2))

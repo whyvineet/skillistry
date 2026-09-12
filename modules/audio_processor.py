@@ -17,7 +17,7 @@ class AudioProcessor:
 
             clip = mp.VideoFileClip(video_path)
             if clip.audio is None:
-                logger.warning("No audio stream found in %s", video_path)
+                logger.info("No audio stream found in %s; video has no audio.", video_path)
                 clip.close()
                 return None
 
@@ -32,7 +32,7 @@ class AudioProcessor:
             return audio_path
 
         except Exception as primary_err:
-            logger.warning("MoviePy extraction failed (%s); trying ffmpeg …", primary_err)
+            logger.debug("MoviePy extraction skipped/failed (%s); trying ffmpeg …", primary_err)
 
         # fallback: direct ffmpeg subprocess
         try:
@@ -45,10 +45,14 @@ class AudioProcessor:
                 "-ac", "1",
                 audio_path,
             ]
-            subprocess.run(cmd, check=True, capture_output=True)
-            logger.info("Audio extracted via ffmpeg fallback → %s", audio_path)
-            return audio_path
+            res = subprocess.run(cmd, capture_output=True)
+            if res.returncode == 0 and os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
+                logger.info("Audio extracted via ffmpeg fallback → %s", audio_path)
+                return audio_path
+            else:
+                logger.info("Video has no audio track (%s).", video_path)
+                return None
 
         except Exception as fallback_err:
-            logger.error("ffmpeg fallback also failed: %s", fallback_err)
+            logger.debug("Audio extraction skipped (no audio track): %s", fallback_err)
             return None
