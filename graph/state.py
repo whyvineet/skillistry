@@ -15,6 +15,7 @@ class InterviewState(TypedDict, total=False):
 
     # Final results
     content_analysis: Optional[dict[str, Any]] # from ContentAnalyzer
+    answer_validity: Optional[dict[str, Any]]  # from SpeechAnalyzer (serialised AnswerValidity)
 
     # Control flow
     error: Optional[str]     # set by any node that encounters a fatal error

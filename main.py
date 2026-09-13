@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -9,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes import router
 from graph.workflow import build_workflow
 from modules import SpeechAnalyzer, ContentAnalyzer
+from interview.service import InterviewService
+from interview.analyzer import InterviewAnalyzer
 from utils.helpers import ensure_dir_exists
 
 # Logging
@@ -43,11 +45,21 @@ async def lifespan(app: FastAPI):
 
     workflow = build_workflow(speech_analyzer, content_analyzer)
 
+    # Interview session service (in-memory)
+    interview_service = InterviewService()
+
+    # Interview-level LLM analyzer (shares the same Ollama model)
+    from langchain_ollama import OllamaLLM
+    llm = OllamaLLM(model=ollama_model, base_url=ollama_base_url)
+    interview_analyzer = InterviewAnalyzer(llm=llm)
+
     ensure_dir_exists(upload_folder)
 
     # Attach to app state so routes can access them
-    app.state.workflow = workflow
-    app.state.upload_folder = upload_folder
+    app.state.workflow            = workflow
+    app.state.upload_folder       = upload_folder
+    app.state.interview_service   = interview_service
+    app.state.interview_analyzer  = interview_analyzer
 
     logger.info("Application startup complete.  Upload folder: %s", upload_folder)
 
@@ -59,13 +71,14 @@ async def lifespan(app: FastAPI):
 # App factory
 def create_app() -> FastAPI:
     _app = FastAPI(
-        title="AI Interview Analyzer",
+        title="Skillistry — AI Mock Interview",
         description=(
-            "Analyses a candidate's video interview response using computer vision "
-            "(emotion + blink detection), speech processing (transcription + "
-            "pronunciation), and an LLM (grammar, tone, relevance, answer quality)."
+            "5-question AI-powered mock interview platform. "
+            "Analyses video responses using computer vision (emotion + blink detection), "
+            "speech processing (transcription + pronunciation), and an LLM "
+            "(grammar, tone, relevance, answer quality, cross-question insights)."
         ),
-        version="1.0.0",
+        version="2.0.0",
         lifespan=lifespan,
     )
 
@@ -88,4 +101,4 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app" , reload=True)
+    uvicorn.run("main:app", reload=True)

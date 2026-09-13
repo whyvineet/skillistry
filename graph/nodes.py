@@ -3,6 +3,7 @@ from typing import Any
 
 from modules import AudioProcessor, VideoAnalyzer, SpeechAnalyzer, ContentAnalyzer
 from graph.state import InterviewState
+from api.schemas import AnswerStatus
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ def analyze_speech_node(state: InterviewState, speech_analyzer: SpeechAnalyzer) 
             "raw_transcript": result.raw_transcript,
             "formatted_text": result.formatted_text,
         },
+        "answer_validity": result.validity.model_dump() if result.validity else None,
     }
 
 
@@ -53,6 +55,25 @@ def analyze_speech_node(state: InterviewState, speech_analyzer: SpeechAnalyzer) 
 def analyze_content_node(state: InterviewState, content_analyzer: ContentAnalyzer) -> dict[str, Any]:
     transcript = state.get("transcript", "")
     question = state.get("question", "")
+    answer_validity = state.get("answer_validity", {})
+    status = answer_validity.get("status") if answer_validity else None
+
+    # Short-circuit if no meaningful speech was detected
+    if status and status != AnswerStatus.VALID:
+        logger.info("[Node] analyze_content  bypassed (status=%s)", status)
+        return {
+            "content_analysis": {
+                "word_count": answer_validity.get("transcript_word_count", 0),
+                "clarity": "N/A",
+                "engagement": "N/A",
+                "structure": "N/A",
+                "grammar": [],
+                "tone": {"score": 0.0, "appropriateness": "Could not evaluate due to missing/insufficient answer."},
+                "relevance": "N/A",
+                "answer_quality": "No meaningful spoken answer detected.",
+                "suggestions": "Please ensure your microphone is working and provide a clear, full answer to the question."
+            }
+        }
 
     logger.info("[Node] analyze_content  words=%d", len(transcript.split()))
 

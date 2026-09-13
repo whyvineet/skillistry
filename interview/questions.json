@@ -1,0 +1,94 @@
+{
+  "general": [
+    {
+      "id": "gen_intro_1",
+      "text": "Tell me about yourself and what brought you to this point in your career.",
+      "category": "introduction",
+      "dimension": "confidence"
+    },
+    {
+      "id": "gen_intro_2",
+      "text": "Walk me through your background and what you consider your greatest professional strength.",
+      "category": "introduction",
+      "dimension": "confidence"
+    },
+    {
+      "id": "gen_intro_3",
+      "text": "Introduce yourself and describe what you are most proud of professionally.",
+      "category": "introduction",
+      "dimension": "confidence"
+    },
+    {
+      "id": "gen_comm_1",
+      "text": "Tell me about a time you had to explain a complex idea to someone unfamiliar with the topic.",
+      "category": "communication",
+      "dimension": "communication"
+    },
+    {
+      "id": "gen_comm_2",
+      "text": "Describe a situation where clear communication made a significant difference in an outcome.",
+      "category": "communication",
+      "dimension": "communication"
+    },
+    {
+      "id": "gen_comm_3",
+      "text": "Give an example of when you had to deliver difficult news or feedback to someone.",
+      "category": "communication",
+      "dimension": "communication"
+    },
+    {
+      "id": "gen_prob_1",
+      "text": "Describe a difficult problem you solved. What was your approach?",
+      "category": "problem_solving",
+      "dimension": "content"
+    },
+    {
+      "id": "gen_prob_2",
+      "text": "Tell me about a challenge you faced and the steps you took to overcome it.",
+      "category": "problem_solving",
+      "dimension": "content"
+    },
+    {
+      "id": "gen_prob_3",
+      "text": "Describe a time when you had to make a decision with incomplete information. What did you do?",
+      "category": "problem_solving",
+      "dimension": "content"
+    },
+    {
+      "id": "gen_adapt_1",
+      "text": "Tell me about a time you had to work with someone whose style or opinion differed greatly from yours.",
+      "category": "adaptability",
+      "dimension": "communication"
+    },
+    {
+      "id": "gen_adapt_2",
+      "text": "Describe a situation where you had to quickly adapt to an unexpected change.",
+      "category": "adaptability",
+      "dimension": "confidence"
+    },
+    {
+      "id": "gen_adapt_3",
+      "text": "Tell me about a time you had to take on a role or task that was outside your comfort zone.",
+      "category": "adaptability",
+      "dimension": "confidence"
+    },
+    {
+      "id": "gen_self_1",
+      "text": "What is one area you are actively working to improve, and what are you doing about it?",
+      "category": "self_awareness",
+      "dimension": "content"
+    },
+    {
+      "id": "gen_self_2",
+      "text": "What motivates you most in your work, and how does that show up day-to-day?",
+      "category": "self_awareness",
+      "dimension": "content"
+    },
+    {
+      "id": "gen_self_3",
+      "text": "Describe a moment when you received critical feedback and how you responded to it.",
+      "category": "self_awareness",
+      "dimension": "content"
+    }
+  ]
+}
